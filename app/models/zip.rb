@@ -16,9 +16,9 @@ def initialize(params={})
     @population=params[:pop].nil? ? params[:population] : params[:pop]
 end
         
-# tells Rails whether tis instance is persisted
+# tells Rails whether this instance is persisted
 def persisted?
-    !@id.nil
+    !@id.nil?
 end
 def created_at
     nil
@@ -43,7 +43,7 @@ end
 # * sort - hash expressing multi-term sort order
 # * offset - document to start results
 # * limit - number of documents to include   
-def self.all(prototype={}, sort={:population=>1}, offset=0, limit=100)
+def self.all(prototype={}, sort={:population=>1}, offset=0, limit=1000)
     # map internal :population term to :pop document term
     tmp = {} # hash needs to stay in stable order provided
     sort.each {|k,v|
@@ -64,6 +64,36 @@ def self.all(prototype={}, sort={:population=>1}, offset=0, limit=100)
     
     return result
 end
+    
+# implements the will_paginate method that accepts
+# page - number >=1 expressing offset in pages
+# per_page - row limit within a single page
+# also take in some custom parameters like
+# sort - order criteria for document
+# (terms) - used a a prototype for selection
+# This method uses the all() method as its
+# implementation and returns instantiated Zip
+# classes within a will_paginate page
+    def self.paginate(params)
+        Rails.logger.debug("paginate(#{params})")
+        page=(params[:page] ||= 1).to_i
+        limit=(params[:per_page] ||= 30).to_i
+        offset=(page-1)*limit
+        sort=params[:sort] ||= {}
+        
+# get the associated page of Zips -- eagerly convert doc to Zip
+        zips=[]
+        all(params, sort, offset, limit).each do |doc|
+            zips << Zip.new(doc)
+        end
+        
+# get a count of all documents in the collection
+        total=all(params, sort, 0, 1).count
+        
+        WillPaginate::Collection.create(page, limit, total) do |pager|
+            pager.replace(zips)
+        end
+    end
     
 # locate a specific document. Use initialize(hash) on the result to get in class instance form.
 def self.find id
